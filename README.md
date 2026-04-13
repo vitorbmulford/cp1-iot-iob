@@ -67,6 +67,18 @@ python app.py
 - `docs/` - documentacao complementar
 - `python/` - aplicacao principal em Python
 
+## Arquitetura
+
+Pequena arquitetura modular usada na pasta `python`:
+
+- **`app.py`**: orquestrador principal — inicializa módulos e controla o loop de captura e estados (AGUARDANDO_ID, TREINO_EM_CURSO, TREINO_CONCLUIDO). Veja [python/app.py](python/app.py).
+- **`config.py`**: constantes e mapeamentos (perfils, caminho do modelo). Veja [python/config.py](python/config.py).
+- **`serial_io.py`**: abstrai a comunicação serial com o Arduino/RFID (inicialização e leitura segura). Veja [python/serial_io.py](python/serial_io.py).
+- **`pose_detector.py`**: encapsula o carregamento do modelo MediaPipe e funções de detecção/angulo. Veja [python/pose_detector.py](python/pose_detector.py).
+- **`ui.py`**: responsabilidades de visualização (grafico de angulos, barra de status e pequenas utilidades de desenho). Veja [python/ui.py](python/ui.py).
+
+Essa separação facilita testes unitários, substituição de dependências (por exemplo, simular `serial_io` para desenvolvimento) e manutenção incremental.
+
 ## Integrantes
 
 - Lorenzo Hayashi Mangini - RM 554901
