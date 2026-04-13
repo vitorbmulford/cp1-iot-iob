@@ -28,7 +28,7 @@ Siga exatamente estes passos dentro da pasta `python`:
 ```bash
 cd python
 py -3.10 -m venv venv
-.\venv\Scripts\Activate.ps1
+source venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
@@ -72,3 +72,4 @@ python app.py
 - Milton Cezar Bacanieski - RM 555206
 - Vitor Bebiano Mulford - RM 555026
 - Victorio Maia Bastelli - RM 554723
+tall -r requirements.txt
