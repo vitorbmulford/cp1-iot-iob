@@ -30,6 +30,7 @@ cd python
 py -3.10 -m venv venv
 source venv/Scripts/activate
 pip install -r requirements.txt
+python app.py
 ```
 
 Se estiver usando o Prompt de Comando, ative com:
