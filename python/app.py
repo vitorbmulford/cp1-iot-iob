@@ -12,12 +12,15 @@ import os
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-arduino_conectado = True
+arduino_conectado = False
+ser = None
 try:
     ser = serial.Serial('COMx', 9600, timeout=0.1)  # Alterar a porta de acordo com o seu dispositivo
     arduino_conectado = True
     print("Arduino ON - Sistema de Identificacao Pronto!")
-except:
+except Exception:
+    arduino_conectado = False
+    ser = None
     print("Arduino OFF - Apenas modo Convidado disponivel (Tecla 'S')")
 
 model_path = '../assets/pose_landmarker_full.task'
@@ -67,7 +70,7 @@ while cap.isOpened():
     tecla = cv2.waitKey(1) & 0xFF
 
     if estado_app == "AGUARDANDO_ID":
-        if arduino_conectado and ser.in_waiting > 0:
+        if arduino_conectado and ser is not None and ser.in_waiting > 0:
             id_lido = ser.readline().decode('utf-8').strip()
             if id_lido in ALUNOS_REGISTRADOS:
                 perfil_ativo = ALUNOS_REGISTRADOS[id_lido]
