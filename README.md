@@ -1,236 +1,256 @@
-# 🏋️ Smart Gym — Monitoramento Inteligente de Exercícios
+# Smart Gym - Monitoramento Inteligente de Exercicios
 
-> Sistema embarcado de monitoramento de exercícios físicos com visão computacional, identificação por RFID e contagem automática de repetições em tempo real.
+Sistema IoT de monitoramento de exercicios fisicos com webcam, MediaPipe,
+Arduino/RFID e contagem automatica de repeticoes em tempo real.
 
----
-
-## 📌 Índice
+## Indice
 
 - [Sobre o Projeto](#sobre-o-projeto)
 - [Funcionalidades](#funcionalidades)
 - [Arquitetura do Sistema](#arquitetura-do-sistema)
 - [Tecnologias Utilizadas](#tecnologias-utilizadas)
-- [Estrutura do Repositório](#estrutura-do-repositório)
-- [Pré-requisitos](#pré-requisitos)
-- [Instalação](#instalação)
+- [Estrutura do Repositorio](#estrutura-do-repositorio)
+- [Pre-requisitos](#pre-requisitos)
+- [Instalacao](#instalacao)
 - [Como Executar](#como-executar)
+- [Teste do RFID](#teste-do-rfid)
 - [Uso do Sistema](#uso-do-sistema)
 - [Fluxo de Estados](#fluxo-de-estados)
-- [Configuração de Alunos](#configuração-de-alunos)
+- [Configuracao de Alunos](#configuracao-de-alunos)
 - [Integrantes](#integrantes)
 
----
+## Sobre o Projeto
 
-## 🧠 Sobre o Projeto
+O Smart Gym identifica o aluno por RFID usando um Arduino com leitor MFRC522.
+Depois da identificacao, a aplicacao usa a webcam e o MediaPipe Pose Landmarker
+para acompanhar o movimento do corpo, calcular o angulo do joelho e contar
+repeticoes de agachamento.
 
-O **Smart Gym** é um sistema IoT de monitoramento de atividade física desenvolvido para academias inteligentes. Ele combina um **leitor RFID (via Arduino)** com **visão computacional (MediaPipe)** para identificar o aluno, acompanhar seus movimentos pela webcam, calcular o ângulo do braço em tempo real e contar automaticamente as repetições do exercício *Rosca Direta*.
+O sistema tambem possui modo convidado pela tecla `S`, grafico de angulo em
+tempo real, barra de status com nome do aluno e meta de repeticoes, e tela de
+conclusao ao atingir o objetivo cadastrado.
 
-O sistema exibe um gráfico de ângulo ao vivo, uma barra de status com progresso e emite uma confirmação ao atingir a meta de repetições cadastrada para cada aluno.
+## Funcionalidades
 
----
+- Identificacao por RFID via Arduino.
+- Modo convidado pela tecla `S`.
+- Deteccao de pose em tempo real com MediaPipe.
+- Calculo do angulo do joelho usando quadril, joelho e tornozelo.
+- Contagem automatica de agachamentos.
+- Grafico de angulo ao vivo com Matplotlib.
+- Barra de status com aluno ativo, repeticoes e objetivo.
+- Reset automatico apos concluir o treino.
+- Teste isolado de RFID em `python/test_rfid.py`.
 
-## ✅ Funcionalidades
+## Arquitetura do Sistema
 
-- **Identificação por RFID** — o aluno aproxima o cartão e o sistema carrega seu perfil automaticamente
-- **Modo Convidado** — acesso rápido sem cartão, pressionando a tecla `S`
-- **Detecção de pose em tempo real** — usa MediaPipe Pose Landmarker para rastrear ombro, cotovelo e pulso
-- **Cálculo de ângulo do braço** — trigonometria aplicada sobre os marcos anatômicos detectados
-- **Contagem automática de repetições** — baseada em limites de ângulo configuráveis (> 160° = descida, < 35° = subida)
-- **Gráfico de ângulo ao vivo** — renderizado com Matplotlib e embutido no frame da câmera
-- **Barra de status** — exibe nome do aluno, repetições realizadas e meta
-- **Conclusão de treino** — mensagem de parabéns ao atingir o objetivo, seguida de reset automático
+```text
+Arduino + MFRC522 -- Serial USB / UID --> python/serial_io.py
+Webcam ------------ Frame BGR ---------> python/app.py
 
----
-
-## 🏗️ Arquitetura do Sistema
-
-```
-┌──────────────┐     Serial (USB)     ┌─────────────────────┐
-│ Arduino +    │ ──── ID do RFID ───► │                     │
-│ Leitor RFID  │                      │     app.py          │
-└──────────────┘                      │  (Orquestrador)     │
-                                      │                     │
-┌──────────────┐     Frame BGR        │  ┌───────────────┐  │
-│   Webcam     │ ──────────────────► │  │pose_detector  │  │
-└──────────────┘                      │  └───────────────┘  │
-                                      │  ┌───────────────┐  │
-                                      │  │   serial_io   │  │
-                                      │  └───────────────┘  │
-                                      │  ┌───────────────┐  │
-                                      │  │     ui.py     │  │
-                                      │  └───────────────┘  │
-                                      │  ┌───────────────┐  │
-                                      │  │   config.py   │  │
-                                      │  └───────────────┘  │
-                                      └─────────────────────┘
+python/app.py
+  |-- config.py        -> porta serial, alunos, objetivo e limites de angulo
+  |-- serial_io.py     -> deteccao da porta COM e leitura do UID
+  |-- pose_detector.py -> MediaPipe e calculo do angulo do joelho
+  |-- ui.py            -> grafico e barra de status
 ```
 
-### Módulos Python
+### Modulos Python
 
-| Módulo | Responsabilidade |
+| Modulo | Responsabilidade |
 |---|---|
-| `app.py` | Orquestrador principal — loop de captura, máquina de estados |
-| `config.py` | Constantes globais, perfis de alunos e caminho do modelo |
-| `serial_io.py` | Comunicação serial com Arduino/RFID (inicialização e leitura) |
-| `pose_detector.py` | Carregamento do modelo MediaPipe e cálculo de ângulo articular |
-| `ui.py` | Gráfico de ângulo em tempo real e barra de status sobreposta |
+| `app.py` | Orquestrador principal, loop de camera e maquina de estados |
+| `config.py` | Configuracoes, alunos cadastrados, caminho do modelo e limites de angulo |
+| `serial_io.py` | Comunicacao serial com Arduino/RFID e normalizacao do UID |
+| `pose_detector.py` | Carregamento do MediaPipe e calculo do angulo do joelho |
+| `ui.py` | Grafico de angulo e barra de status |
+| `test_rfid.py` | Teste isolado da leitura RFID sem webcam |
 
----
+## Tecnologias Utilizadas
 
-## 🛠️ Tecnologias Utilizadas
-
-| Tecnologia | Versão | Finalidade |
+| Tecnologia | Versao | Finalidade |
 |---|---|---|
 | Python | 3.10+ | Linguagem principal |
-| OpenCV | 4.9.0.80 | Captura de vídeo e renderização |
-| MediaPipe | 0.10.33 | Detecção de pose (Pose Landmarker) |
-| NumPy | 1.26.4 | Cálculo de ângulos e manipulação de arrays |
-| PySerial | 3.5 | Comunicação serial com Arduino |
-| Matplotlib | 3.8.2 | Gráfico de ângulo em tempo real |
-| Arduino | — | Leitura do cartão RFID via MFRC522 |
+| OpenCV | 4.9.0.80 | Captura de video e renderizacao |
+| MediaPipe | 0.10.33 | Deteccao de pose |
+| NumPy | 1.26.4 | Calculo de angulos e manipulacao de arrays |
+| PySerial | 3.5 | Comunicacao serial com Arduino |
+| Matplotlib | 3.8.2 | Grafico de angulo em tempo real |
+| Arduino | - | Leitura do cartao RFID via MFRC522 |
 
----
+## Estrutura do Repositorio
 
-## 📁 Estrutura do Repositório
-
-```
+```text
 smart-gym/
-├── arduino/                  # Sketch Arduino para leitura RFID
-├── assets/
-│   └── pose_landmarker_full.task  # Modelo MediaPipe (download necessário)
-├── docs/                     # Documentação complementar e diagramas
-├── python/
-│   ├── app.py                # Ponto de entrada da aplicação
-│   ├── config.py             # Configurações e perfis de alunos
-│   ├── pose_detector.py      # Detecção de pose e cálculo de ângulo
-│   ├── serial_io.py          # Comunicação serial com Arduino
-│   ├── ui.py                 # Interface visual (gráfico e status)
-│   └── requirements.txt      # Dependências Python
-└── README.md
+|-- arduino/
+|   `-- rfid_reader/
+|       `-- rfid_reader.ino
+|-- assets/
+|   `-- pose_landmarker_full.task
+|-- docs/
+|-- python/
+|   |-- app.py
+|   |-- config.py
+|   |-- pose_detector.py
+|   |-- requirements.txt
+|   |-- serial_io.py
+|   |-- test_rfid.py
+|   `-- ui.py
+`-- README.md
 ```
 
----
+## Pre-requisitos
 
-## 📋 Pré-requisitos
+- Python 3.10+.
+- Webcam conectada ao computador.
+- Arduino Uno/Nano ou ESP32 com leitor RFID MFRC522.
+- Modelo `pose_landmarker_full.task` em `assets/pose_landmarker_full.task`.
 
-- **Python 3.10** (versão específica exigida pelo MediaPipe)
-- **Webcam** conectada ao computador
-- **Arduino Uno/Nano ou ESP32** com leitor **RFID MFRC522** *(opcional — modo convidado disponível sem Arduino)*
-- **Modelo MediaPipe** — baixe o arquivo `pose_landmarker_full.task` em:
-  [https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker](https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker)
-  e coloque-o em `assets/pose_landmarker_full.task`
+O modelo pode ser baixado pela pagina oficial do MediaPipe Pose Landmarker:
 
----
+```text
+https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
+```
 
-## ⚙️ Instalação
+## Instalacao
 
-Execute os comandos abaixo **dentro da pasta `python`**:
+Execute os comandos dentro da pasta `python`:
 
-```bash
-# 1. Acesse o diretório
+```powershell
 cd python
-
-# 2. Crie o ambiente virtual com Python 3.10
 py -3.10 -m venv venv
-
-# 3. Ative o ambiente virtual
-# No Git Bash / macOS / Linux:
-source venv/Scripts/activate
-
-# No Prompt de Comando (Windows):
-venv\Scripts\activate
-
-# 4. Instale as dependências
+.\venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
----
-
-## ▶️ Como Executar
-
-> **Importante:** antes de executar, configure a porta serial correta no arquivo `python/app.py`:
-
-```python
-# Linha em app.py — substitua 'COMx' pela porta real do seu Arduino
-ser = serial_io.init_serial('COM3', 9600, timeout=0.1)
-```
-
-Dicas para identificar a porta:
-- **Windows:** Gerenciador de Dispositivos → Portas (COM e LPT)
-- **Linux/macOS:** `ls /dev/tty*` (ex: `/dev/ttyUSB0` ou `/dev/ttyACM0`)
-
-Depois, execute:
+No Git Bash, use:
 
 ```bash
-cd python
-python app.py
+source venv/Scripts/activate
 ```
 
-> Se o Arduino não estiver conectado, o sistema iniciará automaticamente em **modo somente convidado** (tecla `S`).
+## Como Executar
 
----
+O Arduino deve enviar o UID pela serial neste formato:
 
-## 🎮 Uso do Sistema
+```text
+UID:00:A9:39:26
+```
 
-| Ação | Como fazer |
+No sketch Arduino, a saida principal fica assim:
+
+```cpp
+Serial.print("UID:");
+Serial.println(strID);
+```
+
+Antes de rodar o Python, feche o Monitor Serial da Arduino IDE. No Windows, a
+porta COM fica presa a um unico programa por vez. Se o Monitor Serial estiver
+aberto, o Python nao consegue abrir a `COM5`.
+
+Por padrao, o Python tenta detectar a porta automaticamente em `config.py`:
+
+```python
+SERIAL_PORT = None
+SERIAL_BAUD = 9600
+```
+
+Se precisar fixar a porta manualmente, altere para:
+
+```python
+SERIAL_PORT = "COM5"
+SERIAL_BAUD = 9600
+```
+
+Depois execute:
+
+```powershell
+cd python
+.\venv\Scripts\python.exe app.py
+```
+
+O terminal deve mostrar algo parecido com:
+
+```text
+Portas seriais encontradas: COM1 (...), COM5 (Arduino Uno (COM5))
+Arduino ON em COM5 - Sistema de Identificacao Pronto!
+```
+
+## Teste do RFID
+
+Antes de testar com a webcam, e recomendado validar apenas a leitura RFID:
+
+```powershell
+cd python
+.\venv\Scripts\python.exe test_rfid.py
+```
+
+Aproxime o cartao. O esperado e:
+
+```text
+[DEBUG serial] recebido: 'UID:00:A9:39:26'
+[DEBUG serial] UID extraido: 00:A9:39:26
+OK: 00:A9:39:26 -> Lucas
+```
+
+Se aparecer `porta ocupada`, feche o Monitor Serial da Arduino IDE e qualquer
+outra execucao antiga do Python que possa estar usando a COM do Arduino.
+
+## Uso do Sistema
+
+| Acao | Como fazer |
 |---|---|
-| Identificar-se como aluno cadastrado | Aproximar o cartão RFID ao leitor |
+| Identificar aluno cadastrado | Aproximar o cartao RFID ao leitor |
 | Entrar como convidado | Pressionar a tecla `S` |
 | Sair do sistema | Pressionar a tecla `Q` |
 
-Após a identificação:
-1. Posicione-se em frente à webcam com o braço visível
-2. O sistema detectará automaticamente ombro, cotovelo e pulso
-3. Realize a *Rosca Direta* — o ângulo será calculado e as repetições contadas
-4. Ao atingir a meta, uma mensagem de conclusão será exibida por 3 segundos
-5. O sistema retorna automaticamente à tela de identificação
+Depois da identificacao:
 
----
+1. Posicione-se em frente a webcam com o corpo visivel.
+2. O sistema detecta quadril, joelho e tornozelo.
+3. Realize o agachamento.
+4. O angulo do joelho aparece na tela e no grafico.
+5. Ao atingir a meta, a mensagem de treino concluido aparece por 3 segundos.
+6. O sistema volta para a tela de identificacao.
 
-## 🔄 Fluxo de Estados
+## Fluxo de Estados
 
-```
-        ┌─────────────────────┐
-        │   AGUARDANDO_ID     │ ◄─────────────────────┐
-        │  (Tela inicial)     │                       │
-        └────────┬────────────┘                       │
-                 │ RFID lido ou tecla 'S'             │
-                 ▼                                    │
-        ┌─────────────────────┐              3s e reset
-        │  TREINO_EM_CURSO    │                       │
-        │  (Detecção + conta) │                       │
-        └────────┬────────────┘                       │
-                 │ reps >= objetivo                   │
-                 ▼                                    │
-        ┌─────────────────────┐                       │
-        │  TREINO_CONCLUÍDO   │ ──────────────────────┘
-        │  (Mensagem final)   │
-        └─────────────────────┘
+```text
+AGUARDANDO_ID
+  |-- RFID cadastrado ou tecla S
+  v
+TREINO_EM_CURSO
+  |-- contador_reps >= objetivo
+  v
+TREINO_CONCLUIDO
+  |-- espera 3 segundos
+  v
+AGUARDANDO_ID
 ```
 
----
+## Configuracao de Alunos
 
-## 👤 Configuração de Alunos
-
-Edite o arquivo `python/config.py` para cadastrar alunos com seus cartões RFID:
+Edite `python/config.py` para cadastrar alunos:
 
 ```python
 ALUNOS_REGISTRADOS = {
-    "4A B9 3B 1B": {"nome": "Lucas", "exercicio": "Rosca Direta", "objetivo": 5},
-    "B3 22 A1 0C": {"nome": "Maria", "exercicio": "Rosca Direta", "objetivo": 8},
-    # Adicione novos alunos no formato:
-    # "ID_RFID": {"nome": "Nome", "exercicio": "Exercicio", "objetivo": N_REPS},
+    "00:A9:39:26": {"nome": "Lucas", "exercicio": "Agachamento", "objetivo": 5},
+    "B3 22 A1 0C": {"nome": "Maria", "exercicio": "Agachamento", "objetivo": 8},
 }
 
-# Perfil padrão para o modo convidado
-PERFIL_CONVIDADO = {"nome": "Convidado", "exercicio": "Rosca Direta", "objetivo": 3}
+PERFIL_CONVIDADO = {"nome": "Convidado", "exercicio": "Agachamento", "objetivo": 3}
 ```
 
-O **ID RFID** pode ser obtido pela saída serial do Arduino após aproximar o cartão.
+O UID pode vir com `:` ou espacos. O Python normaliza os formatos abaixo para o
+mesmo valor:
 
----
+```text
+UID:00:A9:39:26
+00:A9:39:26
+00 A9 39 26
+```
 
-## 👥 Integrantes
+## Integrantes
 
 | Nome | RM |
 |---|---|
@@ -239,6 +259,4 @@ O **ID RFID** pode ser obtido pela saída serial do Arduino após aproximar o ca
 | Vitor Bebiano Mulford | RM 555026 |
 | Victorio Maia Bastelli | RM 554723 |
 
----
-
-> Projeto desenvolvido para a disciplina de **IoT & IoB** — FIAP.
+Projeto desenvolvido para a disciplina de IoT & IoB - FIAP.
