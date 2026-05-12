@@ -57,7 +57,7 @@ def init_serial(port=None, baud=9600, timeout=0.1):
     selected_port = find_serial_port(port)
     if not selected_port:
         LAST_STATUS = "Arduino OFF - porta serial nao encontrada"
-        print("Arduino OFF - Configure SERIAL_PORT em config.py ou use modo Convidado (Tecla 'S')")
+        print("Arduino OFF - Configure SERIAL_PORT em config.py e feche o Monitor Serial da Arduino IDE.")
         return None
 
     try:

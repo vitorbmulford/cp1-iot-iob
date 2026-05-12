@@ -16,7 +16,7 @@ Arduino/RFID e contagem automatica de repeticoes em tempo real.
 - [Teste do RFID](#teste-do-rfid)
 - [Uso do Sistema](#uso-do-sistema)
 - [Fluxo de Estados](#fluxo-de-estados)
-- [Configuracao de Alunos](#configuracao-de-alunos)
+- [Banco de Dados e Alunos](#banco-de-dados-e-alunos)
 - [Integrantes](#integrantes)
 
 ## Sobre o Projeto
@@ -26,19 +26,23 @@ Depois da identificacao, a aplicacao usa a webcam e o MediaPipe Pose Landmarker
 para acompanhar o movimento do corpo, calcular o angulo do joelho e contar
 repeticoes de agachamento.
 
-O sistema tambem possui modo convidado pela tecla `S`, grafico de angulo em
-tempo real, barra de status com nome do aluno e meta de repeticoes, e tela de
-conclusao ao atingir o objetivo cadastrado.
+O sistema tambem possui banco SQLite para cadastro de alunos e historico de
+acessos, painel visual em Tkinter, grafico de
+angulo em tempo real, barra de status com nome do aluno e meta de repeticoes,
+e tela de conclusao ao atingir a meta cadastrada.
 
 ## Funcionalidades
 
 - Identificacao por RFID via Arduino.
-- Modo convidado pela tecla `S`.
+- Cadastro persistente de alunos em SQLite.
+- Validacao automatica do UID lido no banco de dados.
+- Registro automatico de data e horario de acesso no historico.
+- Painel Tkinter com boas-vindas, exercicio, repeticoes, contador e status.
 - Deteccao de pose em tempo real com MediaPipe.
 - Calculo do angulo do joelho usando quadril, joelho e tornozelo.
 - Contagem automatica de agachamentos.
 - Grafico de angulo ao vivo com Matplotlib.
-- Barra de status com aluno ativo, repeticoes e objetivo.
+- Barra de status com aluno ativo, repeticoes e meta.
 - Reset automatico apos concluir o treino.
 - Teste isolado de RFID em `python/test_rfid.py`.
 
@@ -49,10 +53,11 @@ Arduino + MFRC522 -- Serial USB / UID --> python/serial_io.py
 Webcam ------------ Frame BGR ---------> python/app.py
 
 python/app.py
-  |-- config.py        -> porta serial, alunos, objetivo e limites de angulo
+  |-- config.py        -> porta serial, banco, carga inicial e limites de angulo
+  |-- database.py      -> schema SQLite, alunos e registros de acesso
   |-- serial_io.py     -> deteccao da porta COM e leitura do UID
   |-- pose_detector.py -> MediaPipe e calculo do angulo do joelho
-  |-- ui.py            -> grafico e barra de status
+  |-- ui.py            -> painel Tkinter, grafico e barra de status
 ```
 
 ### Modulos Python
@@ -60,10 +65,12 @@ python/app.py
 | Modulo | Responsabilidade |
 |---|---|
 | `app.py` | Orquestrador principal, loop de camera e maquina de estados |
-| `config.py` | Configuracoes, alunos cadastrados, caminho do modelo e limites de angulo |
+| `config.py` | Configuracoes, caminho do banco/modelo, carga inicial e limites de angulo |
+| `database.py` | Criacao do SQLite, CRUD de alunos e historico de acessos |
+| `seed_db.py` | Script de inicializacao/carga previa de alunos |
 | `serial_io.py` | Comunicacao serial com Arduino/RFID e normalizacao do UID |
 | `pose_detector.py` | Carregamento do MediaPipe e calculo do angulo do joelho |
-| `ui.py` | Grafico de angulo e barra de status |
+| `ui.py` | Painel Tkinter, grafico de angulo e barra de status |
 | `test_rfid.py` | Teste isolado da leitura RFID sem webcam |
 
 ## Tecnologias Utilizadas
@@ -76,6 +83,8 @@ python/app.py
 | NumPy | 1.26.4 | Calculo de angulos e manipulacao de arrays |
 | PySerial | 3.5 | Comunicacao serial com Arduino |
 | Matplotlib | 3.8.2 | Grafico de angulo em tempo real |
+| SQLite | nativo | Persistencia de alunos e acessos |
+| Tkinter | nativo | Painel visual da estacao |
 | Arduino | - | Leitura do cartao RFID via MFRC522 |
 
 ## Estrutura do Repositorio
@@ -91,8 +100,10 @@ smart-gym/
 |-- python/
 |   |-- app.py
 |   |-- config.py
+|   |-- database.py
 |   |-- pose_detector.py
 |   |-- requirements.txt
+|   |-- seed_db.py
 |   |-- serial_io.py
 |   |-- test_rfid.py
 |   `-- ui.py
@@ -166,6 +177,7 @@ Depois execute:
 
 ```powershell
 cd python
+.\venv\Scripts\python.exe seed_db.py
 .\venv\Scripts\python.exe app.py
 ```
 
@@ -193,6 +205,9 @@ Aproxime o cartao. O esperado e:
 OK: 00:A9:39:26 -> Lucas
 ```
 
+Quando o UID for encontrado, o teste tambem grava um novo registro na tabela
+`acessos`.
+
 Se aparecer `porta ocupada`, feche o Monitor Serial da Arduino IDE e qualquer
 outra execucao antiga do Python que possa estar usando a COM do Arduino.
 
@@ -201,7 +216,6 @@ outra execucao antiga do Python que possa estar usando a COM do Arduino.
 | Acao | Como fazer |
 |---|---|
 | Identificar aluno cadastrado | Aproximar o cartao RFID ao leitor |
-| Entrar como convidado | Pressionar a tecla `S` |
 | Sair do sistema | Pressionar a tecla `Q` |
 
 Depois da identificacao:
@@ -217,10 +231,13 @@ Depois da identificacao:
 
 ```text
 AGUARDANDO_ID
-  |-- RFID cadastrado ou tecla S
+  |-- RFID cadastrado
+  v
+PRONTA_PARA_USO
+  |-- pose detectada
   v
 TREINO_EM_CURSO
-  |-- contador_reps >= objetivo
+  |-- contador_reps >= repeticoes
   v
 TREINO_CONCLUIDO
   |-- espera 3 segundos
@@ -228,17 +245,46 @@ TREINO_CONCLUIDO
 AGUARDANDO_ID
 ```
 
-## Configuracao de Alunos
+## Banco de Dados e Alunos
 
-Edite `python/config.py` para cadastrar alunos:
+O banco fica em `python/smart_gym.sqlite3` e e criado automaticamente pelo app
+ou manualmente pelo script:
+
+```powershell
+cd python
+.\venv\Scripts\python.exe seed_db.py
+```
+
+Tabelas principais:
+
+| Tabela | Campos principais | Finalidade |
+|---|---|---|
+| `alunos` | `nome`, `uid`, `exercicio`, `repeticoes`, `ativo` | Alunos autorizados a usar a estacao |
+| `acessos` | `aluno_id`, `uid`, `acessado_em` | Historico de login por RFID |
+
+Cadastro previo via Python em `python/config.py`:
 
 ```python
-ALUNOS_REGISTRADOS = {
-    "00:A9:39:26": {"nome": "Lucas", "exercicio": "Agachamento", "objetivo": 5},
-    "B3 22 A1 0C": {"nome": "Maria", "exercicio": "Agachamento", "objetivo": 8},
-}
+ALUNOS_INICIAIS = [
+    {"uid": "00:A9:39:26", "nome": "Lucas", "exercicio": "Agachamento", "repeticoes": 5},
+    {"uid": "B3 22 A1 0C", "nome": "Maria", "exercicio": "Agachamento", "repeticoes": 8},
+]
+```
 
-PERFIL_CONVIDADO = {"nome": "Convidado", "exercicio": "Agachamento", "objetivo": 3}
+Cadastro manual via SQL:
+
+```sql
+INSERT INTO alunos (nome, uid, exercicio, repeticoes)
+VALUES ('Ana', '11:22:33:44', 'Agachamento', 10);
+```
+
+Consulta do historico de acessos:
+
+```sql
+SELECT alunos.nome, acessos.uid, acessos.acessado_em
+FROM acessos
+JOIN alunos ON alunos.id = acessos.aluno_id
+ORDER BY acessos.acessado_em DESC;
 ```
 
 O UID pode vir com `:` ou espacos. O Python normaliza os formatos abaixo para o
