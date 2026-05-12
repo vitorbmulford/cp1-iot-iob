@@ -7,7 +7,7 @@ DB_PATH = os.path.join(ROOT, 'smart_gym.sqlite3')
 
 # Serial
 # Use None to auto-detect the Arduino port, or set a fixed port such as "COM5".
-SERIAL_PORT = None
+SERIAL_PORT = "COM5"
 SERIAL_BAUD = 9600
 
 # Default data used by seed_db.py and by the app on first run.
