@@ -135,3 +135,16 @@ def has_students(db_path=DB_PATH):
     with closing(connect(db_path)) as conn:
         total = conn.execute("SELECT COUNT(*) FROM alunos").fetchone()[0]
     return total > 0
+
+
+def migrate_exercise_to_bicep_curl(db_path=DB_PATH):
+    """Converte os cadastros legados de agachamento para rosca biceps."""
+    with closing(connect(db_path)) as conn:
+        conn.execute(
+            """
+            UPDATE alunos
+            SET exercicio = 'Rosca Biceps', atualizado_em = datetime('now', 'localtime')
+            WHERE exercicio = 'Agachamento'
+            """
+        )
+        conn.commit()

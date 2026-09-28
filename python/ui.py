@@ -57,6 +57,7 @@ class TrainingDashboard:
         self.reps_target_var = tk.StringVar(value="Repeticoes previstas: -")
         self.counter_var = tk.StringVar(value="Executadas: 0/0")
         self.rfid_var = tk.StringVar(value="RFID: aguardando leitura")
+        self.equipment_var = tk.StringVar(value="Aguardando Halter")
 
         self._build()
 
@@ -92,7 +93,7 @@ class TrainingDashboard:
             anchor="w",
         ).pack(fill="x", pady=(0, 12))
 
-        for var in (self.exercise_var, self.reps_target_var, self.counter_var):
+        for var in (self.exercise_var, self.reps_target_var, self.counter_var, self.equipment_var):
             tk.Label(
                 container,
                 textvariable=var,
@@ -111,7 +112,7 @@ class TrainingDashboard:
             anchor="w",
         ).pack(fill="x", side="bottom", pady=(18, 0))
 
-    def update_state(self, status, aluno=None, contador=0, mensagem_rfid=""):
+    def update_state(self, status, aluno=None, contador=0, mensagem_rfid="", equipamento_detectado=False):
         if self.closed:
             return
 
@@ -132,6 +133,8 @@ class TrainingDashboard:
                 self.exercise_var.set("Exercicio atual: -")
                 self.reps_target_var.set("Repeticoes previstas: -")
                 self.counter_var.set("Executadas: 0/0")
+
+            self.equipment_var.set("Halter Detectado" if equipamento_detectado else "Aguardando Halter")
 
             if mensagem_rfid:
                 self.rfid_var.set(mensagem_rfid)
