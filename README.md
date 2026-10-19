@@ -1,308 +1,174 @@
-# Smart Gym - Monitoramento Inteligente de Exercicios
+# Smart Gym — Checkpoint 05 (FIAP)
 
-Sistema IoT de monitoramento de exercicios fisicos com webcam, MediaPipe,
-Arduino/RFID e contagem automatica de repeticoes em tempo real.
+Estação inteligente de treino que identifica o aluno por RFID, acompanha **rosca bíceps** com webcam, MediaPipe e detecção de equipamento com YOLO, conta repetições completas e transmite ocupação/performance por MQTT. Um dashboard Flask assina os tópicos e atualiza o navegador por SSE, sem refresh manual. Esta versão amplia o CP4 existente.
 
-## Indice
+## Equipe
 
-- [Sobre o Projeto](#sobre-o-projeto)
-- [Funcionalidades](#funcionalidades)
-- [Arquitetura do Sistema](#arquitetura-do-sistema)
-- [Tecnologias Utilizadas](#tecnologias-utilizadas)
-- [Estrutura do Repositorio](#estrutura-do-repositorio)
-- [Pre-requisitos](#pre-requisitos)
-- [Instalacao](#instalacao)
-- [Como Executar](#como-executar)
-- [Teste do RFID](#teste-do-rfid)
-- [Uso do Sistema](#uso-do-sistema)
-- [Fluxo de Estados](#fluxo-de-estados)
-- [Banco de Dados e Alunos](#banco-de-dados-e-alunos)
-- [Integrantes](#integrantes)
+| Integrante | RM |
+| --- | --- |
+| Lorenzo Hayashi Mangini | 554901 |
+| Milton Cezar Bacanieski | 555206 |
+| Vitor Bebiano Mulford | 555026 |
+| Victorio Maia Bastelli | 554723 |
 
-## Sobre o Projeto
+Disciplina: Physical Computing — IoT & IoB, turma 3ESPZ. Entrega do CP05: 19/10/2026.
 
-O Smart Gym identifica o aluno por RFID usando um Arduino com leitor MFRC522.
-Depois da identificacao, a aplicacao usa a webcam e o MediaPipe Pose Landmarker
-para acompanhar o movimento do corpo, calcular o angulo do joelho e contar
-repeticoes de agachamento.
+## O que faz
 
-O sistema tambem possui banco SQLite para cadastro de alunos e historico de
-acessos, painel visual em Tkinter, grafico de
-angulo em tempo real, barra de status com nome do aluno e meta de repeticoes,
-e tela de conclusao ao atingir a meta cadastrada.
+- Arduino Uno/Nano + MFRC522 envia UID por USB serial. O Python normaliza o UID e consulta apenas alunos **ativos** no SQLite. UID desconhecido ou inativo não ocupa a estação.
+- O login muda a estação para `OCUPADA` e publica status MQTT imediatamente após a validação. O status é retido no broker e inclui nome do aluno.
+- A câmera acompanha ombro, cotovelo e pulso. O contador de rosca bíceps do CP4 exige extensão → flexão → extensão e equipamento detectado para contar uma repetição.
+- Ao atingir a meta cadastrada, a estação publica **um** evento de performance com aluno, exercício, repetições, série e horário. Após a tela de conclusão de 3 segundos, encerra a sessão e publica `LIVRE`. A tecla `Q` também encerra a sessão ativa.
+- O dashboard recebe eventos do broker em uma conexão MQTT própria, mostra verde para `LIVRE`, vermelho para `OCUPADA` e mantém as últimas 100 séries em memória. SSE envia as mudanças ao navegador.
+- Em falhas temporárias de MQTT, a contagem local continua; o status mais recente é sincronizado após reconexão. Até 200 eventos de performance gerados durante a desconexão ficam em memória para reenvio. IDs de evento evitam duplicações na tabela.
 
-## Funcionalidades
+## Arquitetura
 
-- Identificacao por RFID via Arduino.
-- Cadastro persistente de alunos em SQLite.
-- Validacao automatica do UID lido no banco de dados.
-- Registro automatico de data e horario de acesso no historico.
-- Painel Tkinter com boas-vindas, exercicio, repeticoes, contador e status.
-- Deteccao de pose em tempo real com MediaPipe.
-- Calculo do angulo do joelho usando quadril, joelho e tornozelo.
-- Contagem automatica de agachamentos.
-- Grafico de angulo ao vivo com Matplotlib.
-- Barra de status com aluno ativo, repeticoes e meta.
-- Reset automatico apos concluir o treino.
-- Teste isolado de RFID em `python/test_rfid.py`.
+```mermaid
+flowchart LR
+    RFID[MFRC522 + Arduino] -->|UID serial| APP[Estação Python]
+    CAMERA[Webcam] -->|frames| APP
+    DB[(SQLite alunos/acessos)] <--> APP
+    APP -->|status QoS 1 retido| MQTT[(Broker MQTT)]
+    APP -->|performance QoS 1 não retida| MQTT
+    MQTT -->|subscribe| DASH[Dashboard Flask]
+    DASH -->|SSE| WEB[Navegador do gestor]
+```
 
-## Arquitetura do Sistema
+O Arduino atual só lê RFID; o **script Python** é o Publisher, conforme o CP05. `python/app.py` mantém a máquina de estados do CP4. `station_events.py` forma os eventos; `mqtt_publisher.py` cuida da conexão e reconexão. `dashboard.py` assina os tópicos e valida JSON antes de atualizar a interface. A Aula 10 foi usada como referência para Paho MQTT, estado retido e supervisório Flask.
 
 ```text
-Arduino + MFRC522 -- Serial USB / UID --> python/serial_io.py
-Webcam ------------ Frame BGR ---------> python/app.py
-
-python/app.py
-  |-- config.py        -> porta serial, banco, carga inicial e limites de angulo
-  |-- database.py      -> schema SQLite, alunos e registros de acesso
-  |-- serial_io.py     -> deteccao da porta COM e leitura do UID
-  |-- pose_detector.py -> MediaPipe e calculo do angulo do joelho
-  |-- ui.py            -> painel Tkinter, grafico e barra de status
+AGUARDANDO_ID --RFID ativo--> PRONTA_PARA_USO --pose--> TREINO_EM_CURSO
+TREINO_EM_CURSO --meta atingida--> TREINO_CONCLUIDO --3 s/logout--> AGUARDANDO_ID
 ```
 
-### Modulos Python
-
-| Modulo | Responsabilidade |
-|---|---|
-| `app.py` | Orquestrador principal, loop de camera e maquina de estados |
-| `config.py` | Configuracoes, caminho do banco/modelo, carga inicial e limites de angulo |
-| `database.py` | Criacao do SQLite, CRUD de alunos e historico de acessos |
-| `seed_db.py` | Script de inicializacao/carga previa de alunos |
-| `serial_io.py` | Comunicacao serial com Arduino/RFID e normalizacao do UID |
-| `pose_detector.py` | Carregamento do MediaPipe e calculo do angulo do joelho |
-| `ui.py` | Painel Tkinter, grafico de angulo e barra de status |
-| `test_rfid.py` | Teste isolado da leitura RFID sem webcam |
-
-## Tecnologias Utilizadas
-
-| Tecnologia | Versao | Finalidade |
-|---|---|---|
-| Python | 3.10+ | Linguagem principal |
-| OpenCV | 4.9.0.80 | Captura de video e renderizacao |
-| MediaPipe | 0.10.33 | Deteccao de pose |
-| NumPy | 1.26.4 | Calculo de angulos e manipulacao de arrays |
-| PySerial | 3.5 | Comunicacao serial com Arduino |
-| Matplotlib | 3.8.2 | Grafico de angulo em tempo real |
-| SQLite | nativo | Persistencia de alunos e acessos |
-| Tkinter | nativo | Painel visual da estacao |
-| Arduino | - | Leitura do cartao RFID via MFRC522 |
-
-## Estrutura do Repositorio
+## Estrutura
 
 ```text
-smart-gym/
-|-- arduino/
-|   `-- rfid_reader/
-|       `-- rfid_reader.ino
-|-- assets/
-|   `-- pose_landmarker_full.task
-|-- docs/
-|-- python/
-|   |-- app.py
-|   |-- config.py
-|   |-- database.py
-|   |-- pose_detector.py
-|   |-- requirements.txt
-|   |-- seed_db.py
-|   |-- serial_io.py
-|   |-- test_rfid.py
-|   `-- ui.py
-`-- README.md
+arduino/rfid_reader/rfid_reader.ino  firmware MFRC522
+assets/pose_landmarker_full.task   modelo MediaPipe
+mqtt/mosquitto.conf                broker local de demonstração
+python/app.py                      estação e fluxo do CP4
+python/config.py                   câmera/serial/limiares/modelos/carga inicial
+python/database.py                 alunos e acessos SQLite
+python/serial_io.py                leitura RFID serial
+python/pose_detector.py            pose MediaPipe
+python/equipment_detector.py       detecção YOLO de equipamento
+python/exercise_counter.py         contagem da rosca bíceps
+python/ui.py                       interface local Tkinter/OpenCV
+python/mqtt_config.py              configuração MQTT por ambiente
+python/mqtt_publisher.py           Publisher MQTT
+python/station_events.py           eventos de sessão e performance
+python/dashboard.py                Subscriber Flask/SSE
+python/templates/dashboard.html    interface web
+python/seed_db.py                  carga inicial de alunos
+python/test_rfid.py                diagnóstico isolado do leitor
+tests/test_cp5.py                  testes automatizados sem hardware
+tests/integration_mqtt.py          smoke test com broker real
 ```
 
-## Pre-requisitos
+## Pré-requisitos
 
-- Python 3.10+.
-- Webcam conectada ao computador.
-- Arduino Uno/Nano ou ESP32 com leitor RFID MFRC522.
-- Modelo `pose_landmarker_full.task` em `assets/pose_landmarker_full.task`.
+- Python **3.12** para as versões de MediaPipe, NumPy, OpenCV e Ultralytics deste projeto. Python 3.13 não foi validado com todas as dependências de visão.
+- Git instalado e acesso à internet na instalação: o pacote CLIP usado pelo YOLO-World é obtido do repositório da Ultralytics. Na primeira carga das classes, o CLIP baixa aproximadamente 338 MB de pesos de texto.
+- Mosquitto (ou broker MQTT compatível), porta 1883 acessível pela estação e dashboard.
+- Webcam, Arduino Uno/Nano com sketch `arduino/rfid_reader/rfid_reader.ino`, leitor MFRC522 e tag cadastrada para validação física. Ligue SDA→D10, SCK→D13, MOSI→D11, MISO→D12, RST→D9, 3.3V→3.3V e GND→GND. Instale a biblioteca Arduino `MFRC522`.
+- Ambiente gráfico para janelas OpenCV/Tkinter. O modelo de pose está em `assets/`; os pesos YOLO constam em `python/`.
 
-O modelo pode ser baixado pela pagina oficial do MediaPipe Pose Landmarker:
+### Instalação
 
-```text
-https://ai.google.dev/edge/mediapipe/solutions/vision/pose_landmarker
-```
-
-## Instalacao
-
-Execute os comandos dentro da pasta `python`:
-
-```powershell
-cd python
-py -3.10 -m venv venv
-.\venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-No Git Bash, use:
+Na raiz deste repositório:
 
 ```bash
-source venv/Scripts/activate
+python3.12 -m venv .venv
+source .venv/bin/activate                 # Windows PowerShell: .venv\Scripts\Activate.ps1
+python -m pip install -r python/requirements.txt
 ```
 
-## Como Executar
+Em Linux sem CUDA, pode instalar primeiro o PyTorch CPU para evitar downloads de dependências NVIDIA; veja os [comandos oficiais do PyTorch](https://pytorch.org/get-started/previous-versions/). Neste computador foi usada a combinação CPU `torch==2.12.0` e `torchvision==0.27.0`. Depois instale o `requirements.txt` normalmente.
 
-O Arduino deve enviar o UID pela serial neste formato:
+Se o Python 3.12 se chamar `py` no Windows, use `py -3.12 -m venv .venv`. Em Linux, também instale o pacote do sistema `python3-tk` se faltar Tkinter. Feche o Monitor Serial da Arduino IDE antes de iniciar a estação.
 
-```text
-UID:00:A9:39:26
+### Broker local
+
+Em outro terminal, na raiz do repositório:
+
+```bash
+mosquitto -c mqtt/mosquitto.conf -v
 ```
 
-No sketch Arduino, a saida principal fica assim:
+Essa configuração aceita conexões sem senha **somente em 127.0.0.1**; serve para estação e dashboard na mesma máquina. Se usar broker externo ou o fornecido em aula, configure o host/usuário/senha por ambiente. Não publique credenciais no repositório.
 
-```cpp
-Serial.print("UID:");
-Serial.println(strID);
+### Configuração por ambiente
+
+| Variável | Padrão | Uso |
+| --- | --- | --- |
+| `SMARTGYM_MQTT_HOST` | `localhost` | Host do broker, igual nos dois processos |
+| `SMARTGYM_MQTT_PORT` | `1883` | Porta TCP |
+| `SMARTGYM_MQTT_USERNAME` / `SMARTGYM_MQTT_PASSWORD` | vazios | Autenticação opcional |
+| `SMARTGYM_MQTT_PREFIX` | `smartgym` | Prefixo dos tópicos |
+| `SMARTGYM_STATION_ID` | `estacao01` | Identificador único por estação |
+| `SMARTGYM_SERIAL_PORT` | autodetecção | Porta serial, por exemplo `COM5` ou `/dev/ttyACM0` |
+| `SMARTGYM_YOLO_IMAGE_SIZE` | `640` | Resolução da inferência em cada recorte de mão; `320` pode ajudar em CPU, com possível perda de detecção de objetos pequenos |
+| `SMARTGYM_DASHBOARD_HOST` / `SMARTGYM_DASHBOARD_PORT` | `127.0.0.1` / `5000` | Endereço web |
+
+Exemplo PowerShell: `$env:SMARTGYM_MQTT_HOST="192.168.1.20"` e `$env:SMARTGYM_SERIAL_PORT="COM5"`. Em Bash: `export SMARTGYM_MQTT_HOST=192.168.1.20`. Execute estação e dashboard com o **mesmo** host/prefixo. Use IDs diferentes ao executar várias estações.
+
+### Banco, dashboard e estação
+
+No terminal com o ambiente ativado, na raiz:
+
+```bash
+python python/seed_db.py
+python python/dashboard.py
 ```
 
-Antes de rodar o Python, feche o Monitor Serial da Arduino IDE. No Windows, a
-porta COM fica presa a um unico programa por vez. Se o Monitor Serial estiver
-aberto, o Python nao consegue abrir a `COM5`.
+Abra <http://127.0.0.1:5000>. Em outro terminal com o mesmo ambiente e variáveis MQTT:
 
-Por padrao, o Python tenta detectar a porta automaticamente em `config.py`:
-
-```python
-SERIAL_PORT = None
-SERIAL_BAUD = 9600
+```bash
+python python/app.py
 ```
 
-Se precisar fixar a porta manualmente, altere para:
+A primeira execução do app também cria o banco e preenche os alunos padrão se vazio. `seed_db.py` atualiza os dois alunos configurados em `python/config.py`; revise UIDs/metas antes de apresentar. A migração do CP4 adapta exercícios antigos para rosca bíceps.
 
-```python
-SERIAL_PORT = "COM5"
-SERIAL_BAUD = 9600
+## Tópicos e payloads
+
+| Tópico | QoS | Retido | Momento |
+| --- | --- | --- | --- |
+| `smartgym/stations/{station_id}/status` | 1 | sim | inicial, login, logout e reconexão |
+| `smartgym/stations/{station_id}/performance` | 1 | não | uma vez ao concluir a série |
+| `smartgym/dashboard/sync/request` e `/ready` | 1 | não | sincronização do backlog após reconexão |
+
+Status (exemplo; UUID e horário variam):
+
+```json
+{"event_id":"b25aee49-4f58-478e-a122-59048e55b311","station_id":"estacao01","status":"OCUPADA","student_id":1,"student_name":"Lucas","session_id":"7d0f86b2-a6db-4df8-bc0e-d2b519d9270d","timestamp":"2026-10-13T20:00:00+00:00"}
 ```
 
-Depois execute:
+Performance:
 
-```powershell
-cd python
-.\venv\Scripts\python.exe seed_db.py
-.\venv\Scripts\python.exe app.py
+```json
+{"event_id":"352e8ef1-7a2e-4cdf-9db8-959659f32861","station_id":"estacao01","student_id":1,"student_name":"Lucas","exercise":"Rosca Biceps","repetitions":5,"series_id":"7d0f86b2-a6db-4df8-bc0e-d2b519d9270d-1","session_id":"7d0f86b2-a6db-4df8-bc0e-d2b519d9270d","timestamp":"2026-10-13T20:03:00+00:00"}
 ```
 
-O terminal deve mostrar algo parecido com:
+No logout, `status` volta a `LIVRE`, com `student_id`, `student_name` e `session_id` nulos. O dashboard usa o timestamp UTC para exibir horário local no navegador. Performance retida recebida indevidamente é descartada; QoS 1 pode duplicar mensagens, então `event_id` deduplica o histórico.
 
-```text
-Portas seriais encontradas: COM1 (...), COM5 (Arduino Uno (COM5))
-Arduino ON em COM5 - Sistema de Identificacao Pronto!
-```
+## RFID e demonstração presencial
 
-## Teste do RFID
+1. Instale/compile o sketch e verifique a saída `UID:AA:BB:CC:DD` em 9600 baud. Feche o Monitor Serial.
+2. Na raiz, inicie o broker, ative a venv, execute `python python/seed_db.py`, depois `python python/dashboard.py` e abra o navegador. Inicie `python python/app.py` em outro terminal.
+3. Confirme estação **LIVRE** em verde no dashboard. Aproxime uma tag **não cadastrada**: o app informa UID não cadastrado, o dashboard continua livre.
+4. Aproxime uma tag ativa cujo UID foi cadastrado em `python/config.py` ou SQLite. Verifique registro de acesso, nome no painel local e **OCUPADA** em vermelho no dashboard sem atualizar a página.
+5. Mostre o objeto de treino à câmera e faça roscas completas até a meta. O contador do CP4 só avança com pose e equipamento válidos. Antes da meta, nenhuma nova linha deve aparecer no histórico.
+6. Na última repetição, confira uma linha com aluno, estação, repetições, horário e série. Após 3 s, o dashboard retorna para **LIVRE**. Opcionalmente, pressione `Q` durante uma sessão para demonstrar logout antecipado.
+7. Para explicar a arquitetura, observe `smartgym/stations/#` no MQTT Explorer ou `mosquitto_sub -h localhost -t 'smartgym/stations/#' -v` em outro terminal.
 
-Antes de testar com a webcam, e recomendado validar apenas a leitura RFID:
+A tecla **L** na janela da webcam já existia no CP4 como **RFID simulado para desenvolvimento**: ela passa o UID configurado pela mesma consulta SQLite. Pode ajudar a ensaiar sem leitor, mas **não substitui a demonstração física obrigatória**. `python python/test_rfid.py` testa a serial isoladamente e registra acesso, porém não inicia MQTT/dashboard.
 
-```powershell
-cd python
-.\venv\Scripts\python.exe test_rfid.py
-```
+## Testes e limites
 
-Aproxime o cartao. O esperado e:
+Execute `python -m unittest discover -s tests -v`. Com o broker local iniciado, execute também `python tests/integration_mqtt.py` (usa a estação de teste `SMARTGYM_STATION_ID`, então não rode junto da estação real com o mesmo ID). Os seis testes cobrem leitura serial com pseudoporta (sem leitor físico), RFID inválido/inativo, transições `LIVRE`/`OCUPADA`, uma publicação ao final da série, deduplicação, SSE e a exigência de equipamento/movimento completo herdada do CP4. Foi executado ainda teste de integração com broker MQTT local para publicação, assinatura, queda, reconexão e reenvio de performance gerada durante a queda.
 
-```text
-[DEBUG serial] recebido: 'UID:00:A9:39:26'
-[DEBUG serial] UID extraido: 00:A9:39:26
-OK: 00:A9:39:26 -> Lucas
-```
+**Validado neste computador:** ambiente Python 3.12.15 instalado em `.venv`; checagem de compatibilidade das 60 dependências; webcam integrada `/dev/video0` entregou frame 640×480; MediaPipe carregou o modelo e processou o frame (sem pose detectada, pois não havia pessoa enquadrada); YOLO-World carregou os pesos locais, o CLIP e executou inferência (sem equipamento detectado no frame); janela Tkinter abriu; app completo abriu câmera/janelas e chegou à inferência. O teste do app foi interrompido após 25 s. Em um recorte real da câmera, a inferência YOLO em CPU levou cerca de 0,42 s em 640 px e 0,06 s em 320 px após aquecimento; a estação pode analisar dois recortes por frame. Também passaram um teste com Mosquitto 2.1.2 real e Flask HTTP/SSE, terminando com uma série no histórico e estação `LIVRE`.
 
-Quando o UID for encontrado, o teste tambem grava um novo registro na tabela
-`acessos`.
-
-Se aparecer `porta ocupada`, feche o Monitor Serial da Arduino IDE e qualquer
-outra execucao antiga do Python que possa estar usando a COM do Arduino.
-
-## Uso do Sistema
-
-| Acao | Como fazer |
-|---|---|
-| Identificar aluno cadastrado | Aproximar o cartao RFID ao leitor |
-| Sair do sistema | Pressionar a tecla `Q` |
-
-Depois da identificacao:
-
-1. Posicione-se em frente a webcam com o corpo visivel.
-2. O sistema detecta quadril, joelho e tornozelo.
-3. Realize o agachamento.
-4. O angulo do joelho aparece na tela e no grafico.
-5. Ao atingir a meta, a mensagem de treino concluido aparece por 3 segundos.
-6. O sistema volta para a tela de identificacao.
-
-## Fluxo de Estados
-
-```text
-AGUARDANDO_ID
-  |-- RFID cadastrado
-  v
-PRONTA_PARA_USO
-  |-- pose detectada
-  v
-TREINO_EM_CURSO
-  |-- contador_reps >= repeticoes
-  v
-TREINO_CONCLUIDO
-  |-- espera 3 segundos
-  v
-AGUARDANDO_ID
-```
-
-## Banco de Dados e Alunos
-
-O banco fica em `python/smart_gym.sqlite3` e e criado automaticamente pelo app
-ou manualmente pelo script:
-
-```powershell
-cd python
-.\venv\Scripts\python.exe seed_db.py
-```
-
-Tabelas principais:
-
-| Tabela | Campos principais | Finalidade |
-|---|---|---|
-| `alunos` | `nome`, `uid`, `exercicio`, `repeticoes`, `ativo` | Alunos autorizados a usar a estacao |
-| `acessos` | `aluno_id`, `uid`, `acessado_em` | Historico de login por RFID |
-
-Cadastro previo via Python em `python/config.py`:
-
-```python
-ALUNOS_INICIAIS = [
-    {"uid": "00:A9:39:26", "nome": "Lucas", "exercicio": "Agachamento", "repeticoes": 5},
-    {"uid": "B3 22 A1 0C", "nome": "Maria", "exercicio": "Agachamento", "repeticoes": 8},
-]
-```
-
-Cadastro manual via SQL:
-
-```sql
-INSERT INTO alunos (nome, uid, exercicio, repeticoes)
-VALUES ('Ana', '11:22:33:44', 'Agachamento', 10);
-```
-
-Consulta do historico de acessos:
-
-```sql
-SELECT alunos.nome, acessos.uid, acessos.acessado_em
-FROM acessos
-JOIN alunos ON alunos.id = acessos.aluno_id
-ORDER BY acessos.acessado_em DESC;
-```
-
-O UID pode vir com `:` ou espacos. O Python normaliza os formatos abaixo para o
-mesmo valor:
-
-```text
-UID:00:A9:39:26
-00:A9:39:26
-00 A9 39 26
-```
-
-## Integrantes
-
-| Nome | RM |
-|---|---|
-| Lorenzo Hayashi Mangini | RM 554901 |
-| Milton Cezar Bacanieski | RM 555206 |
-| Vitor Bebiano Mulford | RM 555026 |
-| Victorio Maia Bastelli | RM 554723 |
-
-Projeto desenvolvido para a disciplina de IoT & IoB - FIAP.
+**Ainda requer validação presencial:** Arduino/MFRC522/tag real (nenhuma porta `/dev/ttyACM*` ou `/dev/ttyUSB*` estava conectada), qualidade da detecção com pessoa e halter enquadrados e série completa executada fisicamente. A fila de performance é apenas em memória: desligamento abrupto da estação pode perder eventos pendentes. O histórico web também fica em memória e recomeça vazio ao reiniciar o dashboard. O status retido pode parecer antigo se a estação for encerrada abruptamente; confira a conexão e reinicie a estação antes da apresentação.

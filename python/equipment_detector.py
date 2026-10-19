@@ -10,7 +10,7 @@ from ultralytics import YOLO
 class EquipmentDetector:
     def __init__(
         self, model_path, confidence, target_classes, max_hand_distance,
-        crop_radius, window_size, required_hits, lock_seconds,
+        crop_radius, window_size, required_hits, lock_seconds, image_size=640,
     ):
         self.model = YOLO(model_path)
         self.confidence = confidence
@@ -20,6 +20,7 @@ class EquipmentDetector:
         self.crop_radius = crop_radius
         self.required_hits = required_hits
         self.lock_seconds = lock_seconds
+        self.image_size = image_size
         self.history = deque(maxlen=window_size)
         self.present = False
         self.last_held_at = None
@@ -52,7 +53,7 @@ class EquipmentDetector:
                 continue
 
             # O imgsz alto amplia a garrafa/celular no recorte antes da inferencia.
-            result = self.model(crop, imgsz=640, conf=self.confidence, verbose=False)[0]
+            result = self.model(crop, imgsz=self.image_size, conf=self.confidence, verbose=False)[0]
             if result.boxes is None:
                 continue
             for box in result.boxes:

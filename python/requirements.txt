@@ -4,3 +4,7 @@ numpy==1.26.4
 pyserial==3.5
 matplotlib==3.8.2
 ultralytics>=8.3,<9
+# YOLO-World set_classes() uses Ultralytics' CLIP fork.
+clip @ git+https://github.com/ultralytics/CLIP.git@7ffa84b3bfa40c42ecc1c77147a855e69cb2dd40
+paho-mqtt>=2.0,<3
+Flask>=3.0,<4

@@ -7,7 +7,7 @@ DB_PATH = os.path.join(ROOT, 'smart_gym.sqlite3')
 
 # Serial
 # Use None to auto-detect the Arduino port, or set a fixed port such as "COM5".
-SERIAL_PORT = "COM5"
+SERIAL_PORT = os.getenv("SMARTGYM_SERIAL_PORT") or None
 SERIAL_BAUD = 9600
 
 # Demonstracao sem leitor fisico: na tela de login, pressione L na janela da webcam.
@@ -26,8 +26,9 @@ POSE_MIN_CONFIDENCE = 0.60
 
 # YOLO / equipamento. O modelo COCO pre-treinado e baixado pelo Ultralytics
 # na primeira execucao, caso ainda nao exista no cache local.
-YOLO_MODEL = "yolov8s-worldv2.pt"
+YOLO_MODEL = os.path.join(ROOT, "yolov8s-worldv2.pt")
 YOLO_CONFIDENCE = 0.15  # Objetos pequenos ou parcialmente ocultos na mao.
+YOLO_IMAGE_SIZE = int(os.getenv("SMARTGYM_YOLO_IMAGE_SIZE", "640"))
 YOLO_TARGET_CLASSES = ("dumbbell", "weight", "bottle", "water bottle", "cell phone", "mobile phone", "cup", "remote control", "book")
 # Classes abertas procuradas pelo YOLO-World somente perto dos punhos.
 HAND_OBJECT_MAX_DISTANCE = 55  # Margem pequena entre punho e caixa do objeto.
