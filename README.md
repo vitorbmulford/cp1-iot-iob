@@ -89,7 +89,29 @@ Em Linux sem CUDA, pode instalar primeiro o PyTorch CPU para evitar downloads de
 
 Se o Python 3.12 se chamar `py` no Windows, use `py -3.12 -m venv .venv`. Em Linux, também instale o pacote do sistema `python3-tk` se faltar Tkinter. Feche o Monitor Serial da Arduino IDE antes de iniciar a estação.
 
-### Broker local
+### Broker MQTT remoto usado na demonstração
+
+O broker MQTT da demonstração está em `3.135.234.101`, porta `1883`, e aceita conexão sem usuário e senha. Antes de iniciar o dashboard e a estação, defina o mesmo host nos dois terminais:
+
+```powershell
+$env:SMARTGYM_MQTT_HOST="3.135.234.101"
+$env:SMARTGYM_MQTT_PORT="1883"
+```
+
+O prefixo padrão permanece `smartgym`, com os tópicos:
+
+```text
+smartgym/stations/estacao01/status
+smartgym/stations/estacao01/performance
+```
+
+Para observar as mensagens diretamente:
+
+```powershell
+mosquitto_sub -h 3.135.234.101 -p 1883 -t "smartgym/stations/#" -v
+```
+
+### Broker local alternativo
 
 Em outro terminal, na raiz do repositório:
 
@@ -112,7 +134,7 @@ Essa configuração aceita conexões sem senha **somente em 127.0.0.1**; serve p
 | `SMARTGYM_YOLO_IMAGE_SIZE` | `640` | Resolução da inferência em cada recorte de mão; `320` pode ajudar em CPU, com possível perda de detecção de objetos pequenos |
 | `SMARTGYM_DASHBOARD_HOST` / `SMARTGYM_DASHBOARD_PORT` | `127.0.0.1` / `5000` | Endereço web |
 
-Exemplo PowerShell: `$env:SMARTGYM_MQTT_HOST="192.168.1.20"` e `$env:SMARTGYM_SERIAL_PORT="COM5"`. Em Bash: `export SMARTGYM_MQTT_HOST=192.168.1.20`. Execute estação e dashboard com o **mesmo** host/prefixo. Use IDs diferentes ao executar várias estações.
+Exemplo PowerShell para o broker da demonstração: `$env:SMARTGYM_MQTT_HOST="3.135.234.101"` e `$env:SMARTGYM_SERIAL_PORT="COM10"`. Em Bash: `export SMARTGYM_MQTT_HOST=3.135.234.101`. Execute estação e dashboard com o **mesmo** host/prefixo. Use IDs diferentes ao executar várias estações.
 
 ### Banco, dashboard e estação
 
@@ -161,7 +183,7 @@ No logout, `status` volta a `LIVRE`, com `student_id`, `student_name` e `session
 4. Aproxime uma tag ativa cujo UID foi cadastrado em `python/config.py` ou SQLite. Verifique registro de acesso, nome no painel local e **OCUPADA** em vermelho no dashboard sem atualizar a página.
 5. Mostre o objeto de treino à câmera e faça roscas completas até a meta. O contador do CP4 só avança com pose e equipamento válidos. Antes da meta, nenhuma nova linha deve aparecer no histórico.
 6. Na última repetição, confira uma linha com aluno, estação, repetições, horário e série. Após 3 s, o dashboard retorna para **LIVRE**. Opcionalmente, pressione `Q` durante uma sessão para demonstrar logout antecipado.
-7. Para explicar a arquitetura, observe `smartgym/stations/#` no MQTT Explorer ou `mosquitto_sub -h localhost -t 'smartgym/stations/#' -v` em outro terminal.
+7. Para explicar a arquitetura, observe `smartgym/stations/#` no MQTT Explorer ou `mosquitto_sub -h 3.135.234.101 -p 1883 -t 'smartgym/stations/#' -v` em outro terminal.
 
 A tecla **L** na janela da webcam já existia no CP4 como **RFID simulado para desenvolvimento**: ela passa o UID configurado pela mesma consulta SQLite. Pode ajudar a ensaiar sem leitor, mas **não substitui a demonstração física obrigatória**. `python python/test_rfid.py` testa a serial isoladamente e registra acesso, porém não inicia MQTT/dashboard.
 

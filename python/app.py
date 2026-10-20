@@ -59,7 +59,8 @@ def main():
     if ser is None:
         ultimo_status_rfid = f"RFID: {serial_io.get_last_status()}"
 
-    cap = cv2.VideoCapture(0)
+    camera_backend = cv2.CAP_DSHOW if os.name == "nt" else cv2.CAP_ANY
+    cap = cv2.VideoCapture(0, camera_backend)
     plot = ui.AnglePlot()
     dashboard = ui.TrainingDashboard()
     mqtt_config = MQTTConfig()

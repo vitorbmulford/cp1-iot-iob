@@ -16,6 +16,7 @@ SIMULATED_RFID_UID = "C2:87:2D:30"
 # Default data used by seed_db.py and by the app on first run.
 ALUNOS_INICIAIS = [
     {"uid": "C2:87:2D:30", "nome": "Lucas", "exercicio": "Rosca Biceps", "repeticoes": 5},
+    {"uid": "89:42:A3:99", "nome": "Lucas", "exercicio": "Rosca Biceps", "repeticoes": 5},
     {"uid": "B3 22 A1 0C", "nome": "Maria", "exercicio": "Rosca Biceps", "repeticoes": 8},
 ]
 
